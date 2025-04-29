@@ -409,6 +409,10 @@ void shard_connection::send_conn_setup_commands(struct timeval timestamp) {
     }
 }
 
+size_t timeval2ms(struct timeval tv) {
+  return (size_t)tv.tv_sec * 1000 + tv.tv_usec / 1000;
+}
+
 void shard_connection::process_response(void)
 {
     int ret;
@@ -417,11 +421,14 @@ void shard_connection::process_response(void)
     struct timeval now;
     gettimeofday(&now, NULL);
 
+    size_t max_time_cost_ms = 0;
     while ((ret = m_protocol->parse_response()) > 0) {
         bool error = false;
         protocol_response *r = m_protocol->get_response();
 
         request* req = pop_req();
+        size_t time_cost_ms = timeval2ms(now) - timeval2ms(req->m_sent_time);
+        max_time_cost_ms = std::max(time_cost_ms, max_time_cost_ms);
         switch (req->m_type)
         {
         case rt_auth:
@@ -500,6 +507,19 @@ void shard_connection::process_response(void)
             }
             return;
         }
+    }
+
+    if (m_config->request_timeout_ms > 0 && max_time_cost_ms >= m_config->request_timeout_ms) {
+      sample_benchmark_error_log("Command timeout(maximum time cost: %lldms, timeout limit: %lld), try to reconnect Server\n", max_time_cost_ms, m_config->request_timeout_ms);
+
+      // client manage connection & disconnection of shard
+      m_conns_manager->disconnect();
+      ret = m_conns_manager->connect();
+      if (ret != 0) {
+          benchmark_error_log("failed to reconnect.\n");
+          exit(1);
+      }
+      return;
     }
 
     fill_pipeline();
@@ -592,16 +612,30 @@ void shard_connection::handle_event(short events)
         }
 #endif
         if (!ssl_error && errno) {
-            benchmark_error_log("Connection error: %s\n", strerror(errno));
+            sample_benchmark_error_log("Connection error: %s, try to reconnect Server\n", strerror(errno));
         }
         disconnect();
+
+        m_conns_manager->disconnect();
+        int ret = m_conns_manager->connect();
+        if (ret != 0) {
+            sample_benchmark_error_log("failed to reconnect.\n");
+            exit(1);
+        }
 
         return;
     }
 
     if (events & BEV_EVENT_EOF) {
-        benchmark_error_log("connection dropped.\n");
+        sample_benchmark_error_log("connection dropped, try to reconnect Server\n");
         disconnect();
+
+        m_conns_manager->disconnect();
+        int ret = m_conns_manager->connect();
+        if (ret != 0) {
+            sample_benchmark_error_log("failed to reconnect.\n");
+            exit(1);
+        }
 
         return;
     }

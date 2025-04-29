@@ -35,6 +35,9 @@
 #define benchmark_error_log(...) \
     benchmark_log(LOGLEVEL_ERROR, __VA_ARGS__)
 
+#define sample_benchmark_error_log(...) \
+    sample_benchmark_log(LOGLEVEL_ERROR, __VA_ARGS__)
+
 enum key_pattern_index {
     key_pattern_set       = 0,
     key_pattern_delimiter = 1,
@@ -91,6 +94,7 @@ struct benchmark_config {
     double key_median;
     const char *key_pattern;
     unsigned int reconnect_interval;
+    unsigned int request_timeout_ms;
     int multi_key_get;
     const char *authenticate;
     int select_db;
@@ -123,6 +127,7 @@ struct benchmark_config {
 
 extern void benchmark_log_file_line(int level, const char *filename, unsigned int line, const char *fmt, ...);
 extern void benchmark_log(int level, const char *fmt, ...);
+extern void sample_benchmark_log(int level, const char *fmt, ...);
 bool is_redis_protocol(enum PROTOCOL_TYPE type);
 
 #endif /* _MEMTIER_BENCHMARK_H */

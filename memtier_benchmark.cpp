@@ -92,6 +92,34 @@ void benchmark_log(int level, const char *fmt, ...)
     va_end(args);
 }
 
+void sample_benchmark_log(int level, const char *fmt, ...)
+{
+    if (level > log_level)
+        return;
+
+    static struct timeval last_log_time;
+    struct timeval now;
+    gettimeofday(&now, NULL);
+    if (last_log_time.tv_sec + 1 > now.tv_sec) {
+      return;
+    } else {
+      last_log_time = now;
+    }
+
+    struct tm tm_time;
+    localtime_r(&now.tv_sec, &tm_time);
+
+    char time_str[32];
+    strftime(time_str, sizeof(time_str), "%Y-%m-%d %H:%M:%S", &tm_time);
+    char new_fmt[1024];
+    snprintf(new_fmt, sizeof(new_fmt), "[%s] %s", time_str, fmt);
+
+    va_list args;
+    va_start(args, fmt);
+    vfprintf(stderr, new_fmt, args);
+    va_end(args);
+}
+
 bool is_redis_protocol(enum PROTOCOL_TYPE type) {
     return (type == PROTOCOL_REDIS_DEFAULT || type == PROTOCOL_RESP2 || type == PROTOCOL_RESP3);
 }
@@ -411,6 +439,7 @@ static int config_parse_args(int argc, char *argv[], struct benchmark_config *cf
         o_randomize,
         o_client_stats,
         o_reconnect_interval,
+        o_request_timeout_ms,
         o_generate_keys,
         o_multi_key_get,
         o_select_db,
@@ -487,6 +516,7 @@ static int config_parse_args(int argc, char *argv[], struct benchmark_config *cf
         { "key-stddev",                 1, 0, o_key_stddev },
         { "key-median",                 1, 0, o_key_median },
         { "reconnect-interval",         1, 0, o_reconnect_interval },
+        { "request-timeout-ms",         1, 0, o_request_timeout_ms },
         { "multi-key-get",              1, 0, o_multi_key_get },
         { "authenticate",               1, 0, 'a' },
         { "select-db",                  1, 0, o_select_db },
@@ -786,6 +816,15 @@ static int config_parse_args(int argc, char *argv[], struct benchmark_config *cf
                         return -1;
                     }
                     break;
+                case o_request_timeout_ms:
+                    endptr = NULL;
+                    cfg->request_timeout_ms = (unsigned int) strtoul(optarg, &endptr, 10);
+                    if (!cfg->request_timeout_ms || !endptr || *endptr != '\0') {
+                        fprintf(stderr, "error: request_timeout_ms must be greater than zero.\n");
+                        return -1;
+                    }
+                    break;
+
                 case o_generate_keys:
                     cfg->generate_keys = 1;
                     break;

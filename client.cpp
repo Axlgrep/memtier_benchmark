@@ -437,9 +437,9 @@ void client::handle_response(unsigned int conn_id, struct timeval timestamp,
                              request *request, protocol_response *response)
 {
     if (response->is_error()) {
-        benchmark_error_log("server %s handle error response: %s\n",
-                            m_connections[conn_id]->get_readable_id(),
-                            response->get_status());
+        sample_benchmark_error_log("server %s handle error response: %s\n",
+                                   m_connections[conn_id]->get_readable_id(),
+                                   response->get_status());
     }
     switch (request->m_type) {
         case rt_get:
